@@ -1,129 +1,121 @@
-# Self-hosted Matrix
+# matrix-selfhost
 
-A small, scripted [Matrix](https://matrix.org) chat server: **Synapse** (the
-homeserver), **Postgres**, and the **Element** web client, all in Docker
-Compose. One `.env` file describes the server, and one script (`matrix.sh`)
-runs it.
+Run your own private [Matrix](https://matrix.org) chat server, with
+end-to-end encrypted messages, group rooms, and file sharing, on a machine
+you control.
 
-Defaults are private on purpose: sign-up is **invite-only**, **federation is
-off** (only your own accounts can talk to each other), and every new room is
-**end-to-end encrypted**. Each of these is one setting in `.env`.
+This kit packages the official components into a single, scripted Docker
+Compose setup:
 
-## Pick how people reach it
+- **[Synapse](https://github.com/element-hq/synapse)**: the Matrix homeserver.
+- **PostgreSQL**: its database.
+- **[Element Web](https://github.com/element-hq/element-web)**: a chat client
+  in the browser. Any Matrix app (Element X, FluffyChat, …) works too.
 
-| `MODE` | Use it when | You need | Guide |
-|---|---|---|---|
-| `cloudflare` | The server is behind NAT/CGNAT, or you don't want open ports. | A domain whose DNS is on Cloudflare. | [docs/cloudflare-tunnel.md](docs/cloudflare-tunnel.md) |
-| `public` | The server has a public IP: a VPS, or a home server with port forwarding. | A domain at **any** DNS provider, plus ports 80 and 443 open. | [docs/public-server.md](docs/public-server.md) |
-| `local` | You're trying it on your own machine, or it should only work on your home network. | Nothing for `*.localhost`. For a LAN, local DNS or hosts entries. | [docs/local.md](docs/local.md) |
-| `proxy` | You already run nginx, Traefik, Caddy, or similar. | Your proxy handles TLS and routing. | [docs/reverse-proxy.md](docs/reverse-proxy.md) |
+You fill in one config file and run one command. The script generates
+secrets, renders the config, creates keys, and starts everything.
 
-Not sure? To **try it in 2 minutes**, use `local`. If it's **for real** and
-your server has a public IP, use `public`. If it doesn't have a public IP,
-use `cloudflare`.
+## Features
 
-## How it works
+- **Choose how the server is reached:** a Cloudflare Tunnel, a public server
+  with automatic Let's Encrypt certificates and any DNS provider, your own
+  computer or home network only, or behind a reverse proxy you already run.
+- **Private by default:** sign-up is invite-only, every new room is
+  end-to-end encrypted, and federation with other Matrix servers is off until
+  you enable it.
+- **Simple day-to-day management:** `./matrix.sh invite`, `adduser`,
+  `backup`, `restore`, `update`, and `status`.
+- **Secrets never leave the server.** They're generated on first start, and
+  nothing sensitive is stored in the repository.
 
-```
-                 clients (Element web, Element X, FluffyChat, …)
-                                     │  HTTPS
-              ┌──────────────────────┼──────────────────────────┐
-              │ cloudflare: cloudflared tunnel (outbound only)   │
-              │ public/local: Caddy on :80/:443 (automatic TLS)  │  ← MODE picks one
-              │ proxy: your own reverse proxy                    │
-              └──────┬───────────────┬──────────────────┬────────┘
-     matrix.example.com      chat.example.com      example.com/.well-known/matrix/*
-                     ▼               ▼                  ▼
-               ┌─────────┐     ┌─────────┐       ┌───────────┐
-               │ synapse │     │ element │       │ wellknown │  "Matrix for example.com
-               └────┬────┘     └─────────┘       └───────────┘   lives at matrix.example.com"
-                    ▼
-               ┌──────────┐
-               │ postgres │
-               └──────────┘
-```
+## What you need
 
-There are three names in `.env`:
+- A Linux machine with Docker: a VPS, a home server, a Raspberry Pi 4/5, or
+  your own computer for a local trial. 2 GB of RAM is comfortable for a
+  small group.
+- A domain name. You don't need one for a local trial.
+- About 30 minutes.
 
-- **`SERVER_NAME`** is the part after the colon in user IDs (`@alice:example.com`).
-  **It can never change**, because it's baked into every account and message.
-- **`MATRIX_HOST`** is where Synapse is reachable, e.g. `matrix.example.com`.
-- **`ELEMENT_HOST`** is where the web client is reachable, e.g. `chat.example.com`.
+## Get started
 
-If `SERVER_NAME` differs from `MATRIX_HOST`, apps and servers look up
-`https://SERVER_NAME/.well-known/matrix/…` to find the real host. The
-`wellknown` container answers that. If your bare domain already hosts a
-website elsewhere, set `SERVER_NAME` equal to `MATRIX_HOST`. The IDs then look
-like `@alice:matrix.example.com`, and no delegation is needed.
+➡️ **Follow the [installation guide](docs/guide.md).** It walks through every
+step, from an empty machine to your first chat.
 
-## Quick start
-
-On any Linux machine with Docker (`curl -fsSL https://get.docker.com | sudo sh`):
+Just want to see it running on your own computer?
 
 ```sh
-git clone <this repo> matrix && cd matrix
+git clone <repository-url> matrix && cd matrix
 cp .env.example .env
-nano .env          # pick a MODE, set the three names (see the guide for your MODE)
+# set: MODE=local  SERVER_NAME=matrix.localhost  MATRIX_HOST=matrix.localhost  ELEMENT_HOST=chat.localhost
 ./matrix.sh up
-./matrix.sh adduser yourname --admin
-./matrix.sh status
+./matrix.sh adduser me --admin
 ```
 
-Then open `ELEMENT_HOST` in a browser and sign in.
+Then open http://chat.localhost.
 
-**For a remote server,** keep the repo on your own machine and run
-`./deploy.sh user@server`. It copies the repo there over SSH (to `~/matrix`)
-and runs `./matrix.sh up`. Run it again after any change to `.env` or
-`templates/`.
+## Documentation
 
-To try it locally, these values give you a working server at
-http://chat.localhost:
-
-```ini
-MODE=local
-SERVER_NAME=matrix.localhost
-MATRIX_HOST=matrix.localhost
-ELEMENT_HOST=chat.localhost
-```
+| | |
+|---|---|
+| [Installation guide](docs/guide.md) | Step by step, start here. |
+| [Cloudflare Tunnel](docs/modes/cloudflare.md) · [Public server](docs/modes/public.md) · [Local / LAN](docs/modes/local.md) · [Reverse proxy](docs/modes/proxy.md) | Setup specific to each way of exposing the server. |
+| [Configuration](docs/configuration.md) | Every setting in `.env`, and how to customise Synapse. |
+| [Operations](docs/operations.md) | Users, invites, backups, updates, moving servers. |
+| [Security & privacy](docs/security.md) | What's protected, and from whom. |
+| [Troubleshooting](docs/troubleshooting.md) | Common problems and fixes. |
 
 ## Commands
 
-All of these run on the server, in the repo folder:
+Run these on the server, in the repository folder:
 
-```sh
-./matrix.sh up                 # (re)render config and start; safe to repeat
-./matrix.sh status             # containers + reachability checks
-./matrix.sh logs [service]     # follow logs: synapse, postgres, element, wellknown, caddy, cloudflared
-./matrix.sh adduser NAME [--admin]
-./matrix.sh invite [USES] [DAYS]   # sign-up token, default 1 use / 7 days (0 = unlimited)
-./matrix.sh invites            # list tokens
-./matrix.sh revoke TOKEN
-./matrix.sh update             # pull new images, restart
-./matrix.sh backup             # → backups/<timestamp>/
-./matrix.sh restore DIR        # into a fresh install
-./matrix.sh ca-cert            # MODE=local on a LAN: export the CA for your devices
-./matrix.sh compose ARGS…      # raw docker compose with the right files for MODE
-./matrix.sh down
+| Command | What it does |
+|---|---|
+| `./matrix.sh up` | Render config and start or update everything. Safe to repeat. |
+| `./matrix.sh status` | Container state and reachability checks. |
+| `./matrix.sh logs [service]` | Follow logs (`synapse`, `postgres`, `element`, `caddy`, `cloudflared`, …). |
+| `./matrix.sh adduser NAME [--admin]` | Create an account. |
+| `./matrix.sh invite [USES] [DAYS]` | Create a sign-up token (default: 1 use, 7 days). |
+| `./matrix.sh invites` / `revoke TOKEN` | List or delete tokens. |
+| `./matrix.sh backup` / `restore DIR` | Back up, or restore into a fresh install. |
+| `./matrix.sh update` | Pull newer images and restart. |
+| `./matrix.sh ca-cert` | Local/LAN mode: export the certificate authority for your devices. |
+| `./matrix.sh down` | Stop everything. |
+| `./deploy.sh user@host` | Run this **on your own computer**: copy the repo to a server over SSH and start it. |
+
+## How it fits together
+
 ```
-
-Day-to-day work (users, invites, backups, federation, moving servers) is
-covered in [docs/operations.md](docs/operations.md). For problems, see
-[docs/troubleshooting.md](docs/troubleshooting.md).
-
-## Repository layout
+            browsers and Matrix apps
+                       │ HTTPS
+       ┌───────────────┴────────────────┐
+       │ Cloudflare Tunnel, Caddy, or   │  ← chosen by MODE
+       │ your own reverse proxy         │
+       └──┬─────────────┬────────────┬──┘
+          │             │            │
+   matrix.<domain> chat.<domain> <domain>/.well-known/matrix/*
+          ▼             ▼            ▼
+     ┌─────────┐   ┌─────────┐  ┌───────────┐
+     │ Synapse │   │ Element │  │ wellknown │  tells apps where Synapse is
+     └────┬────┘   └─────────┘  └───────────┘
+          ▼
+     ┌──────────┐
+     │ Postgres │
+     └──────────┘
+```
 
 | Path | Purpose |
 |---|---|
-| `.env.example` | Every setting, documented. Copy it to `.env`. |
-| `matrix.sh` | Runs on the server. Generates secrets and config, and starts, stops, backs up, and manages users. |
-| `deploy.sh` | Runs on your machine. Copies the repo to a server over SSH and runs `matrix.sh up`. |
-| `docker-compose.yml` | Core services: postgres, synapse, element, wellknown. |
-| `compose/*.yml` | Per-mode additions: `cloudflare.yml` (cloudflared), `caddy.yml` (`public`/`local`), `proxy.yml` (published ports). |
-| `templates/` | Config templates. **Edit these**, not the generated copies in `data/`. |
-| `scripts/admin.py` | Admin API helper behind `invite`/`invites`/`revoke`. It runs inside the Synapse container. |
-| `data/` | **Server only, never committed.** Database, media, signing key, secrets, generated config, certificates. |
-| `backups/` | Output of `./matrix.sh backup`. |
+| `.env.example` | All settings, commented. Copy it to `.env`. |
+| `matrix.sh` | Management script; runs on the server. |
+| `deploy.sh` | Copies the repo to a remote server and starts it. |
+| `docker-compose.yml`, `compose/` | Core services, plus the extra service each mode adds. |
+| `templates/` | Synapse, Element, and discovery config templates. Customise here. |
+| `scripts/admin.py` | Synapse admin API helper used by the invite commands. |
+| `data/` | Created on the server: database, media, keys, secrets. Never committed. |
 
-Secrets (the database password, registration secret, and so on) are generated
-on the server on first start, in `data/secrets.env`. They never leave it
-except in your backups.
+## Credits
+
+This kit only orchestrates other people's work: [Synapse](https://github.com/element-hq/synapse)
+and [Element](https://github.com/element-hq/element-web) by Element,
+[Caddy](https://caddyserver.com), [cloudflared](https://github.com/cloudflare/cloudflared),
+and [PostgreSQL](https://www.postgresql.org).

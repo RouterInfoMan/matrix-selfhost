@@ -1,60 +1,97 @@
 # Troubleshooting
 
-Start with `./matrix.sh status` and `./matrix.sh logs <service>`.
+Start with these two commands on the server:
 
-**`synapse (local)` OK, but the public checks fail**
-: Synapse is fine, and the problem is in front of it. Check the logs of
-  whatever exposes it: `logs cloudflared`, `logs caddy`, or your own proxy.
+```sh
+./matrix.sh status            # what's running, what's reachable
+./matrix.sh logs synapse      # or caddy, cloudflared, postgres, element
+```
 
-**Cloudflare: HTTP 502 on some or all hostnames**
-: Usually a **second cloudflared** is connected to the same tunnel, typically
-  from running the dashboard's `docker run … --token` command. Find it with
-  `docker ps | grep cloudflared` and `pgrep -a cloudflared`, and remove
-  everything except `matrix-cloudflared-1`. The tunnel page in the dashboard
-  should list exactly one connector.
-: Otherwise, the route is wrong. It needs Type **HTTP** (not HTTPS), and the
-  URL must use the container name (`synapse:8008`, not `localhost:8008`).
+If `synapse (local)` is OK but the public checks fail, Synapse itself is
+fine, and the problem is in front of it: DNS, the tunnel, Caddy, or your
+proxy.
 
-**Cloudflare: 530 / error 1033**
-: No connector is running. `./matrix.sh logs cloudflared` will show an
-  invalid or empty token.
+---
 
-**"Registration has been disabled" / no token field**
-: The running Synapse has old config. Run `./matrix.sh up`; if that doesn't
-  help, run `./matrix.sh compose restart synapse`. Element only asks for the
-  token **after** you submit a username and password.
+### Docker: `permission denied … docker.sock`
 
-**`SERVER_NAME changed from … to …`**
-: This is deliberate. A server's name can't change. Revert `.env`, or wipe
-  `data/` to start over, which deletes everything.
+Your user isn't in the `docker` group yet. Run
+`sudo usermod -aG docker $USER`, then log out and back in.
 
-**Caddy: certificate errors (MODE=public)**
-: DNS doesn't point at this server yet, ports 80/443 aren't reachable from
-  outside, or there's an AAAA record without working IPv6. See
-  [public-server.md](public-server.md#if-certificates-fail).
+### `set MODE in .env …`
 
-**Browser warns about the certificate (MODE=local)**
-: The device doesn't trust the local CA yet. Run `./matrix.sh ca-cert` and
-  install it ([local.md](local.md#2-start-it-and-export-the-ca)).
+`MODE` is empty. Pick one of `public`, `cloudflare`, `local`, or `proxy`; see
+[the guide](guide.md#1-choose-how-people-will-reach-your-server).
 
-**`Bind for 0.0.0.0:80 failed: port is already allocated`**
-: Something else uses the port. For MODE=local, set `HTTP_PORT`/`HTTPS_PORT`.
-  For MODE=public, stop the other service or switch to MODE=proxy behind it.
-  For MODE=proxy, change `ELEMENT_PORT`/`WELLKNOWN_PORT`.
+### `SERVER_NAME changed from … to …`
 
-**Federation tester fails (ENABLE_FEDERATION=true)**
-: Check that `https://SERVER_NAME/.well-known/matrix/server` returns JSON.
-  `./matrix.sh status` shows it. On Cloudflare, disable Bot Fight Mode for
-  `MATRIX_HOST`. Remember that MODE=local can't federate.
+A server's name can't be changed after the first start. Put the old value
+back in `.env`, or delete `data/` to start over (this erases everything).
 
-**Uploads fail above ~95 MB**
-: That's Cloudflare's 100 MB request limit. Other modes default to 200M
-  (`MAX_UPLOAD_SIZE`).
+### `Bind for 0.0.0.0:80 failed: port is already allocated`
 
-**`permission denied … docker.sock`**
-: Run `sudo usermod -aG docker $USER`, then log out and back in.
+Another program is already using that port.
+- **`local` mode:** set `HTTP_PORT` / `HTTPS_PORT` to free ports.
+- **`public` mode:** stop the other program, or switch to `proxy` mode behind
+  it.
+- **`proxy` mode:** change `ELEMENT_PORT` / `WELLKNOWN_PORT`.
 
-**Can't decrypt old messages on a new device**
-: Use your recovery key, under **Settings → Encryption** in Element. Without
-  it, history from before that device existed can't be decrypted. The server
-  can't help, because it never had the keys.
+### Certificates fail (`public` mode)
+
+DNS doesn't point to the server yet, ports 80/443 aren't reachable from the
+internet, or there's an AAAA record for IPv6 that doesn't work. See
+[modes/public.md](modes/public.md#if-certificates-fail).
+
+### Browser certificate warning (`local` mode, LAN)
+
+The device doesn't trust the local CA yet. Run `./matrix.sh ca-cert` and
+install the file; see [modes/local.md](modes/local.md#3-start-then-trust-the-certificate-authority).
+
+### Cloudflare: error 502
+
+- **A second `cloudflared` is connected to the same tunnel.** This usually
+  happens after running the `docker run` command from the dashboard. On the
+  server, run `docker ps | grep cloudflared` and `pgrep -a cloudflared`, and
+  remove any copy that isn't part of this stack. The tunnel's page in the
+  dashboard should list exactly one connector.
+- **A route is wrong.** The service type must be `HTTP` (not HTTPS), and the
+  URL must use the service name (`synapse:8008`, not `localhost:8008`).
+
+### Cloudflare: error 1033 / 530
+
+The tunnel has no running connector. `./matrix.sh logs cloudflared` usually
+shows a missing or invalid `CLOUDFLARE_TUNNEL_TOKEN`.
+
+### "Registration has been disabled"
+
+The running Synapse is still using older configuration. Run
+`./matrix.sh up`, and if needed, `./matrix.sh compose restart synapse`.
+
+Note that Element asks for the invite token only **after** you submit a
+username and password.
+
+### Apps say the server can't be found
+
+The app looks up `https://SERVER_NAME/.well-known/matrix/client`. Open that
+address in a browser. It should show a short JSON text naming your
+`MATRIX_HOST`. If it doesn't, check the DNS record or route for the bare
+`SERVER_NAME`. As a workaround, enter `MATRIX_HOST` as the server address in
+the app.
+
+### Uploads fail for large files
+
+You've hit `MAX_UPLOAD_SIZE`. In `cloudflare` mode, the limit can't exceed
+about 100 MB because of Cloudflare's free plan.
+
+### Federation tester shows errors
+
+Federation must be enabled (`ENABLE_FEDERATION=true`), the mode must be
+reachable from the internet (not `local`), and
+`https://SERVER_NAME/.well-known/matrix/server` must return JSON. In
+`cloudflare` mode, disable Bot Fight Mode for `MATRIX_HOST`.
+
+### "Unable to decrypt" messages on a new device
+
+Verify the new device from an existing one, or enter your recovery key
+(Element: **Settings → Encryption**). Without either, older messages can't
+be decrypted. The server never has the keys, so it can't help.

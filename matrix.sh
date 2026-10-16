@@ -29,7 +29,7 @@ load_env() {
     done
     [[ "$SERVER_NAME" != "example.com" ]] || die "edit .env: SERVER_NAME is still example.com"
 
-    MODE="${MODE:-cloudflare}"
+    MODE="${MODE-cloudflare}"   # unset: cloudflare (older installs); empty: must choose
     ENABLE_REGISTRATION="${ENABLE_REGISTRATION:-false}"
     ENABLE_FEDERATION="${ENABLE_FEDERATION:-false}"
     if [[ "$ENABLE_REGISTRATION" == true ]]; then REQUIRE_TOKEN=false; else REQUIRE_TOKEN=true; fi
@@ -39,7 +39,7 @@ load_env() {
         cloudflare)   COMPOSE_FILE=docker-compose.yml:compose/cloudflare.yml ;;
         public|local) COMPOSE_FILE=docker-compose.yml:compose/caddy.yml ;;
         proxy)        COMPOSE_FILE=docker-compose.yml:compose/proxy.yml ;;
-        *) die "MODE must be cloudflare, public, local or proxy (got '$MODE')" ;;
+        *) die "set MODE in .env to cloudflare, public, local or proxy (got '$MODE'); see docs/guide.md" ;;
     esac
     export COMPOSE_FILE
 
@@ -299,7 +299,7 @@ cmd_ca_cert() {
     [[ "$MODE" == local && "$SCHEME" == https ]] || die "only MODE=local with non-.localhost names uses a local CA"
     docker compose exec -T caddy cat /data/caddy/pki/authorities/local/root.crt > matrix-local-ca.crt \
         || die "Caddy hasn't created its CA yet; run ./matrix.sh up and open $ELEMENT_URL once"
-    echo "Wrote $(pwd)/matrix-local-ca.crt; install it as a trusted root CA on each device (see docs/local.md)."
+    echo "Wrote $(pwd)/matrix-local-ca.crt; install it as a trusted root CA on each device (see docs/modes/local.md)."
 }
 
 cmd="${1:-}"; shift || true

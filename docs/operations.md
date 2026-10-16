@@ -1,151 +1,129 @@
-# Running the server
+# Operations
 
-Every command here runs **on the server**, in the repo folder (e.g. `~/matrix`).
-From your own machine you can wrap any of them:
-`ssh server 'cd ~/matrix && ./matrix.sh status'`.
-
-## First account
-
-```sh
-./matrix.sh adduser yourname --admin
-```
-
-Sign in at `ELEMENT_HOST` with that name and password, using **Sign in**, not
-**Create account**. Any Matrix app works too, such as Element X (iOS/Android),
-Element desktop, or FluffyChat. When the app asks for a server, enter
-`SERVER_NAME`.
-
-The first time you sign in, Element offers to set up a **recovery key**.
-Save it somewhere safe. Without it, a new device can't read your old
-encrypted messages.
+Every command runs **on the server**, in the repository folder. From another
+computer, you can wrap any of them:
+`ssh user@server 'cd ~/matrix && ./matrix.sh status'`.
 
 ## Adding people
 
-**Invite tokens (recommended).** People pick their own username and password:
+### Invite tokens (recommended)
+
+People choose their own username and password:
 
 ```sh
 ./matrix.sh invite            # 1 use, valid 7 days
-./matrix.sh invite 5 30       # 5 uses, valid 30 days (0 = unlimited / never)
-./matrix.sh invites           # what exists, how often each was used
-./matrix.sh revoke TOKEN
+./matrix.sh invite 5 30       # 5 uses, valid 30 days
+./matrix.sh invite 0 0        # unlimited uses, never expires (careful)
+./matrix.sh invites           # list tokens and how often each was used
+./matrix.sh revoke TOKEN      # delete a token early
 ```
 
-`invite` prints a message to send to them. They click **Create account**,
-fill in a username and password, and are then asked for the token.
+`invite` prints a short message to send to the person. In Element, they
+click **Create account**, enter a username and password, and are then asked
+for the token.
 
-The script talks to Synapse's admin API as an `@admin-bot` account that it
-creates on first use. Its login is stored in `data/synapse/.admin-bot.json`.
-Don't deactivate that account.
+The invite commands talk to Synapse's admin API as an `@admin-bot` account.
+It's created automatically on first use, so don't deactivate it.
 
-**Creating accounts directly:**
+### Creating accounts yourself
+
 ```sh
-./matrix.sh adduser bob           # prompts for a password; add --admin for admins
+./matrix.sh adduser alice            # normal user; asks for a password
+./matrix.sh adduser bob --admin      # server administrator
 ```
-This works through Synapse's registration shared secret, so it works even
-when sign-up is closed.
 
-**Open sign-up:** with `ENABLE_REGISTRATION=true`, anyone who can reach the
-server can create an account. Avoid this on a public server, because spam
-bots find open servers quickly.
+This works even though public sign-up is closed.
 
-## Other user management (admin API)
+## Managing users
 
-You need an admin's access token. In Element, it's under **Settings → Help &
-About → Advanced → Access Token**. Treat it like a password.
+Synapse's [admin API](https://element-hq.github.io/synapse/latest/usage/administration/admin_api/)
+covers everything else. You need an admin account's access token, which you
+can copy in Element under **Settings → Help & About → Advanced**. Treat it
+like a password.
 
 ```sh
 TOKEN=syt_...
 API=http://127.0.0.1:8008/_synapse/admin
 H="Authorization: Bearer $TOKEN"
 
-curl -s -H "$H" "$API/v2/users" | python3 -m json.tool                                   # list users
-curl -s -XPOST -H "$H" "$API/v1/reset_password/@bob:example.com" \
-     -d '{"new_password":"...","logout_devices":true}'                                    # reset password
-curl -s -XPUT  -H "$H" "$API/v2/users/@bob:example.com" -d '{"admin":true}'                # make admin
-curl -s -XPOST -H "$H" "$API/v1/deactivate/@bob:example.com" -d '{"erase":false}'          # deactivate
+# List users
+curl -s -H "$H" "$API/v2/users" | python3 -m json.tool
+
+# Reset a password (and log out their devices)
+curl -s -XPOST -H "$H" "$API/v1/reset_password/@alice:example.com" \
+     -d '{"new_password":"a-new-password","logout_devices":true}'
+
+# Grant (or remove, with false) admin rights
+curl -s -XPUT -H "$H" "$API/v2/users/@alice:example.com" -d '{"admin":true}'
+
+# Deactivate an account
+curl -s -XPOST -H "$H" "$API/v1/deactivate/@alice:example.com" -d '{"erase":false}'
 ```
 
-Reference: https://element-hq.github.io/synapse/latest/usage/administration/admin_api/
-
-Usernames can't be renamed or reused. Deactivated names stay reserved.
-
-## Settings in `.env`
-
-After changing anything in `.env` or `templates/`, run `./matrix.sh up`
-(or `./deploy.sh server` from your machine). It re-renders the config and
-restarts only the services whose config changed.
-
-| Setting | Effect |
-|---|---|
-| `ENABLE_FEDERATION=true` | Talk to matrix.org and every other server. Needs a publicly reachable mode, and the `SERVER_NAME` discovery route if `SERVER_NAME` differs from `MATRIX_HOST`. Test it at https://federationtester.matrix.org. |
-| `ENABLE_REGISTRATION=true` | Open sign-up, with no token needed. |
-| `MAX_UPLOAD_SIZE=500M` | Raise the upload limit. Cloudflare's free plan caps requests at 100 MB regardless. |
-| `MODE=…` | Switch how the server is exposed. Data is kept, and leftover containers (e.g. cloudflared) are removed. |
-
-**`SERVER_NAME` can't be changed.** The script refuses to start if it
-differs from the first start. Changing it means wiping `data/`, which loses
-all accounts and messages.
-
-**Encryption:** every new room, including public ones, is end-to-end
-encrypted (`encryption_enabled_by_default_for_room_type` in
-`templates/homeserver.yaml`). Existing rooms keep their setting. You can
-enable encryption in **Room settings → Security & Privacy**, but it can't be
-turned off afterwards.
-
-Any other Synapse option goes into `templates/homeserver.yaml`. See the
-[config reference](https://element-hq.github.io/synapse/latest/usage/configuration/config_documentation.html).
-Never edit the copies in `data/`, because they're overwritten.
+Usernames can't be renamed, and deactivated usernames can't be reused.
 
 ## Updates
 
 ```sh
-./matrix.sh update      # pull newer images, restart what changed
+./matrix.sh backup
+./matrix.sh update
 ```
 
-Run this every few weeks, since Synapse releases security fixes regularly.
-Take a backup first.
+`update` downloads newer versions of all images and restarts what changed.
+Do this every few weeks. To update the kit itself, run `git pull`, then
+`./matrix.sh up` (or `./deploy.sh`).
 
 ## Backups
 
 ```sh
-./matrix.sh backup      # → backups/<timestamp>/
+./matrix.sh backup        # creates backups/<date-time>/
 ```
 
-| File | Contains |
+| File | Contents |
 |---|---|
-| `synapse.sql.gz` | The database: accounts, rooms, messages. |
-| `synapse-data.tar.gz` | The **signing key** (the server's identity) and uploaded media. |
-| `caddy-data.tar.gz` | MODE=public/local only: certificates and the local CA. |
+| `synapse.sql.gz` | The database: accounts, rooms, messages (encrypted ones stay encrypted). |
+| `synapse-data.tar.gz` | The server's signing key and uploaded media. |
+| `caddy-data.tar.gz` | `public`/`local` modes: certificates, and the local CA. |
 | `secrets.env`, `.env` | Generated secrets and your settings. |
 
-Backups contain secrets, so **copy them off the server** and keep them
-private:
-```sh
-scp -r server:matrix/backups/<timestamp> ./matrix-backups/
-```
-
-To automate backups, add a cron job (`crontab -e`) that runs a nightly backup
-and deletes backups older than 14 days:
-```
-30 3 * * * cd ~/matrix && ./matrix.sh backup >/dev/null && find backups -mindepth 1 -maxdepth 1 -mtime +14 -exec rm -rf {} +
-```
-
-## Restore, or move to a new server
-
-On the new machine:
+A backup that only exists on the same machine doesn't protect you from losing
+that machine. Copy backups elsewhere, for example to your computer:
 
 ```sh
-# 1. Get the repo, and use the .env from the backup
-git clone <this repo> matrix && cd matrix
-cp /path/to/backup/.env .env
-#    (change MODE or hostnames now if you're switching how it's exposed;
-#     SERVER_NAME must stay the same)
-
-# 2. Restore and start
-./matrix.sh restore /path/to/backup
+scp -r user@server:matrix/backups/<date-time> ./matrix-backups/
 ```
 
-`restore` refuses to run if `data/` already holds a database. Move the old
-`data/` aside first. Afterwards, point DNS or the tunnel routes at the new
-machine, and stop the old server. Two servers with the same identity must
-never run at the same time.
+Backups contain secrets. See [security.md](security.md#backups).
+
+**Automatic nightly backups** that keep 14 days. Add this with `crontab -e`
+on the server, adjusting the path:
+
+```
+30 3 * * * cd $HOME/matrix && ./matrix.sh backup >/dev/null && find backups -mindepth 1 -maxdepth 1 -mtime +14 -exec rm -rf {} +
+```
+
+## Restoring, or moving to a new machine
+
+1. Prepare the new machine (guide steps [2](guide.md#2-prepare-the-machine)
+   and [3](guide.md#3-get-the-code)).
+2. Use the `.env` from the backup: `cp /path/to/backup/.env .env`. You may
+   change `MODE` and the hostnames now, but **not** `SERVER_NAME`.
+3. Restore and start:
+   ```sh
+   ./matrix.sh restore /path/to/backup
+   ```
+4. Point DNS, tunnel routes, or proxy rules at the new machine. Then shut the
+   old one down for good, because two servers must never run with the same
+   identity.
+
+`restore` only works on a fresh install. It refuses to overwrite an existing
+`data/` folder.
+
+## Stopping and removing
+
+```sh
+./matrix.sh down          # stop; data is kept
+```
+
+To delete everything permanently, stop the stack, then remove `data/`. The
+files are owned by container users, so use `sudo rm -rf data`.
