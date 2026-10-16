@@ -44,7 +44,7 @@ step, from an empty machine to your first chat.
 Just want to see it running on your own computer?
 
 ```sh
-git clone <repository-url> matrix && cd matrix
+git clone https://github.com/RouterInfoMan/matrix-selfhost.git matrix && cd matrix
 cp .env.example .env
 # set: MODE=local  SERVER_NAME=matrix.localhost  MATRIX_HOST=matrix.localhost  ELEMENT_HOST=chat.localhost
 ./matrix.sh up

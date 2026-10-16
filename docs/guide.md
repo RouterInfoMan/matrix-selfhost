@@ -69,7 +69,7 @@ latter, make sure `ssh user@your-server` works without problems.
 On the server, or on your own computer if you'll deploy over SSH:
 
 ```sh
-git clone <repository-url> matrix
+git clone https://github.com/RouterInfoMan/matrix-selfhost.git matrix
 cd matrix
 cp .env.example .env
 ```
