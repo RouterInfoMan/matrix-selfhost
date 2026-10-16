@@ -1,0 +1,5 @@
+.env
+data/
+backups/
+matrix-local-ca.crt
+__pycache__/

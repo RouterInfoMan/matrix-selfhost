@@ -1,0 +1,12 @@
+# MODE=proxy: bring your own reverse proxy (nginx, Traefik, HAProxy, ...).
+# Services are published on BIND_ADDRESS (default 127.0.0.1) for it to forward to:
+#   synapse   -> BIND_ADDRESS:8008
+#   element   -> BIND_ADDRESS:ELEMENT_PORT   (default 8080)
+#   wellknown -> BIND_ADDRESS:WELLKNOWN_PORT (default 8081)
+services:
+  element:
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${ELEMENT_PORT:-8080}:80"
+  wellknown:
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:${WELLKNOWN_PORT:-8081}:80"

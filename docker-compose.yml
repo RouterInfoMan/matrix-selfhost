@@ -1,0 +1,48 @@
+# Core services, shared by every MODE. matrix.sh adds compose/<mode>.yml on
+# top (via COMPOSE_FILE), so run docker compose through `./matrix.sh compose ...`.
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    env_file: data/secrets.env
+    environment:
+      POSTGRES_USER: synapse
+      POSTGRES_DB: synapse
+      # Synapse requires C collation
+      POSTGRES_INITDB_ARGS: "--encoding=UTF-8 --lc-collate=C --lc-ctype=C"
+    volumes:
+      - ./data/postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U synapse -d synapse"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  synapse:
+    image: matrixdotorg/synapse:latest
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SYNAPSE_CONFIG_PATH: /config/homeserver.yaml
+    volumes:
+      - ./data/synapse:/data                    # state: signing key, media
+      - ./data/synapse-config:/config:ro        # rendered from templates/
+    # Localhost only by default (status checks, admin API). MODE=proxy can
+    # widen this with BIND_ADDRESS so a proxy on another machine can reach it.
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:8008:8008"
+
+  element:
+    image: vectorim/element-web:latest
+    restart: unless-stopped
+    volumes:
+      - ./data/element-config.json:/app/config.json:ro
+
+  # Delegation files for the bare SERVER_NAME domain (see templates/wellknown.conf).
+  wellknown:
+    image: nginx:alpine
+    restart: unless-stopped
+    volumes:
+      - ./data/wellknown.conf:/etc/nginx/conf.d/default.conf:ro

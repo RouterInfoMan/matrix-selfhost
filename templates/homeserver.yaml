@@ -1,0 +1,65 @@
+# Rendered by matrix.sh into data/synapse-config/homeserver.yaml.
+# Edit THIS file (templates/homeserver.yaml), not the rendered copy — it is
+# overwritten on every setup/deploy.
+# Lines starting with "#FED+ " are kept only when ENABLE_FEDERATION=true,
+# lines starting with "#FED- " only when it is false.
+# Full reference: https://element-hq.github.io/synapse/latest/usage/configuration/config_documentation.html
+
+server_name: "__SERVER_NAME__"
+public_baseurl: "__MATRIX_URL__/"
+pid_file: /data/homeserver.pid
+
+# Federation runs over port 443, not 8448. When SERVER_NAME and MATRIX_HOST
+# are the same, Synapse answers /.well-known/matrix/server itself. When they
+# differ, the `wellknown` container serves it on SERVER_NAME.
+serve_server_wellknown: true
+
+listeners:
+  - port: 8008
+    tls: false
+    type: http
+    x_forwarded: true
+    bind_addresses: ["0.0.0.0"]
+    resources:
+      - names: [__LISTENER_RESOURCES__]
+        compress: false
+
+database:
+  name: psycopg2
+  args:
+    user: synapse
+    password: "__POSTGRES_PASSWORD__"
+    database: synapse
+    host: postgres
+    cp_min: 5
+    cp_max: 10
+
+log_config: "/config/log.config"
+media_store_path: /data/media_store
+signing_key_path: "/data/signing.key"
+
+max_upload_size: __MAX_UPLOAD_SIZE__
+
+# Sign-up is always on, but by default needs an invite token from
+# `./matrix.sh invite` (no tokens = nobody can sign up).
+# ENABLE_REGISTRATION=true in .env drops the token requirement (open sign-up).
+enable_registration: true
+registration_requires_token: __REQUIRE_TOKEN__
+enable_registration_without_verification: __ENABLE_REGISTRATION__
+
+registration_shared_secret: "__REGISTRATION_SHARED_SECRET__"
+macaroon_secret_key: "__MACAROON_SECRET_KEY__"
+form_secret: "__FORM_SECRET__"
+
+report_stats: false
+
+# ENABLE_FEDERATION=false: only accounts on __SERVER_NAME__ can talk to each other.
+#FED- federation_domain_whitelist: []
+#FED- trusted_key_servers: []
+# ENABLE_FEDERATION=true: talk to the rest of the Matrix network.
+#FED+ trusted_key_servers:
+#FED+   - server_name: "matrix.org"
+suppress_key_server_warning: true
+
+# Every new room is end-to-end encrypted, including public ones.
+encryption_enabled_by_default_for_room_type: all

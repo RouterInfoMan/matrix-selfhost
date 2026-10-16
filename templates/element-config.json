@@ -1,0 +1,15 @@
+{
+  "default_server_config": {
+    "m.homeserver": {
+      "base_url": "__MATRIX_URL__",
+      "server_name": "__SERVER_NAME__"
+    }
+  },
+  "disable_custom_urls": false,
+  "disable_guests": true,
+  "brand": "Element",
+  "default_theme": "dark",
+  "room_directory": {
+    "servers": [__ROOM_DIRECTORY_SERVERS__]
+  }
+}
